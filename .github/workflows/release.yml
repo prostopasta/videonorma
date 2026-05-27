@@ -202,6 +202,14 @@ jobs:
           if [ -f /lib/systemd/user/videonorma.service ] && [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
               REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
+              # Remove old binaries installed by install.sh so /usr/local/bin/ takes effect
+              for OLD_BIN in normalize-audio videonorma-daemon; do
+                  OLD_PATH="$REAL_HOME/.local/bin/$OLD_BIN"
+                  if [ -f "$OLD_PATH" ] && [ ! -L "$OLD_PATH" ]; then
+                      rm -f "$OLD_PATH"
+                  fi
+              done
+
               # Remove old user-installed service file (from install.sh) so systemd
               # uses the system-wide unit at /lib/systemd/user/ instead
               OLD_SVC="$REAL_HOME/.config/systemd/user/videonorma.service"
