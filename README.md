@@ -87,18 +87,41 @@ A video player (VLC, mpv, Totem, etc.) is needed to play the output — `xdg-ope
 
 ## Installation
 
+### Ubuntu / Debian — .deb package (recommended)
+
+```bash
+# Download the latest .deb from the releases page
+wget https://github.com/prostopasta/videonorma/releases/latest/download/videonorma_$(curl -s https://api.github.com/repos/prostopasta/videonorma/releases/latest | grep tag_name | cut -d'"' -f4 | tr -d v)_all.deb
+sudo dpkg -i videonorma_*_all.deb
+sudo apt-get install -f   # install any missing system dependencies
+```
+
+The package installs `normalize-audio` to `/usr/local/bin/` and runs `pipx install ffmpeg-normalize` automatically.
+
+### Any distro — from source archive
+
+```bash
+# Download and extract
+wget https://github.com/prostopasta/videonorma/releases/latest/download/videonorma-VERSION.tar.gz
+tar -xzf videonorma-VERSION.tar.gz
+cd videonorma-VERSION/
+
+# Run the installer (auto-detects apt / dnf / pacman / zypper)
+bash install.sh
+```
+
+**CLI only** (no file manager integration):
+
+```bash
+bash install.sh --cli-only
+```
+
+### From git (development)
+
 ```bash
 git clone https://github.com/prostopasta/videonorma.git
 cd videonorma
 bash install.sh
-```
-
-The installer detects your package manager and file manager automatically.
-
-**CLI only** (no file manager integration, no sudo needed except for ffmpeg):
-
-```bash
-bash install.sh --cli-only
 ```
 
 ### Fedora / RHEL
