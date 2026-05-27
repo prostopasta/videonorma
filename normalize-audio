@@ -25,16 +25,47 @@ if ! command -v ffmpeg &>/dev/null; then
     exit 1
 fi
 
+VERSION="1.2.1"
+
 usage() {
-    echo "Usage: normalize-audio <file> [file2 ...]"
-    echo ""
-    echo "  Normalizes loudness to EBU R128 -16 LUFS."
-    echo "  Original file is never modified."
-    echo "  Output: <name>_normalized.<ext>"
-    exit 1
+    cat <<'EOF'
+Usage: normalize-audio [OPTIONS] <file> [file2 ...]
+
+Normalize video/audio loudness to EBU R128 (-16 LUFS, broadcast standard).
+The original file is never modified.
+Output: <name>_normalized.<ext> alongside the source file.
+
+Options:
+  -h, --help       Show this help message and exit
+  -V, --version    Show version and exit
+
+Examples:
+  normalize-audio recording.mov
+  normalize-audio *.mp4
+  normalize-audio ~/Downloads/meeting.mov ~/Videos/demo.mkv
+
+Normalization settings:
+  Target level   -16 LUFS  (EBU R128)
+  True peak      -1.5 dBTP
+  LRA            11 LU
+  Video          stream copy (no re-encode, no quality loss)
+  Audio          AAC 192 kbps
+
+Supported formats:
+  .mov  .mp4  .mkv  .webm  .avi  .m4v  .ts  .wmv  .flv
+
+More info: https://github.com/prostopasta/videonorma
+EOF
 }
 
-[[ $# -eq 0 ]] && usage
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help)    usage; exit 0 ;;
+        -V|--version) echo "normalize-audio $VERSION"; exit 0 ;;
+    esac
+done
+
+[[ $# -eq 0 ]] && usage && exit 1
 
 for INPUT in "$@"; do
     [[ ! -f "$INPUT" ]] && echo "Not found: $INPUT" && continue
