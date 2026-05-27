@@ -1,15 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22">
   <!-- Dark waveform icon for light panels/trays -->
-  <!-- "before" bars (shorter, faded) -->
-  <rect x="1"  y="8"  width="2.5" height="6"  rx="1" fill="#1a1a2e" opacity="0.4"/>
-  <rect x="4.5" y="5" width="2.5" height="12" rx="1" fill="#1a1a2e" opacity="0.4"/>
-  <rect x="8"  y="9"  width="2.5" height="4"  rx="1" fill="#1a1a2e" opacity="0.4"/>
+  <!-- "before" bars (uneven height, faded dark) -->
+  <rect x="0"   y="8"   width="3" height="6"  rx="1" fill="#1a1a2e" opacity="0.4"/>
+  <rect x="4"   y="4"   width="3" height="14" rx="1" fill="#1a1a2e" opacity="0.4"/>
+  <rect x="8"   y="9"   width="3" height="4"  rx="1" fill="#1a1a2e" opacity="0.4"/>
 
-  <!-- arrow -->
-  <text x="11" y="13" font-size="5" fill="#1a1a2e" opacity="0.6"
-        font-family="sans-serif" font-weight="bold">›</text>
+  <!-- arrow (right-pointing triangle) -->
+  <polygon points="12,8.5 12,13.5 14.5,11" fill="#1a1a2e" opacity="0.65"/>
 
   <!-- "after" bars (equal height, solid dark) -->
-  <rect x="13.5" y="7" width="2.5" height="8" rx="1" fill="#1a1a2e"/>
-  <rect x="17"   y="7" width="2.5" height="8" rx="1" fill="#1a1a2e"/>
+  <rect x="15.5" y="6.5" width="3" height="9" rx="1" fill="#1a1a2e"/>
+  <rect x="19.5" y="6.5" width="2.5" height="9" rx="1" fill="#1a1a2e"/>
 </svg>
