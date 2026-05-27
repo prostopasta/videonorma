@@ -5,7 +5,7 @@
 <h1 align="center">videonorma</h1>
 
 <p align="center">
-  Fix quiet videos from Slack, macOS screen recordings, and anywhere else — right from your file manager or terminal.
+  Fix quiet macOS screen recordings and screencasts on Linux — one click or one command.
 </p>
 
 <p align="center">
@@ -22,9 +22,22 @@
 
 ## The problem
 
-macOS screen recordings and Slack video downloads often arrive at **−40 to −50 dB** average loudness — whisper-quiet even at maximum system volume. On Linux, there is no automatic loudness correction for downloaded files.
+**macOS screen recordings arrive whisper-quiet on Linux.**
 
-videonorma fixes that.
+QuickTime, Zoom, Loom, Teams, and other screen-recording tools on macOS capture audio at a very low input level — typically **−40 to −50 dB LUFS** average loudness. When you open these files on Linux there is no automatic loudness compensation, so the video is barely audible even at maximum system volume.
+
+Common sources of the problem:
+
+| Recording tool | Typical loudness | Audible on Linux? |
+|---|---|---|
+| QuickTime screen recording | −44 dBFS | ❌ barely |
+| Zoom cloud / local recording | −38 to −46 dBFS | ❌ barely |
+| Loom screen recording | −40 to −48 dBFS | ❌ barely |
+| macOS Screenshot.app (⌘+Shift+5) | −42 to −50 dBFS | ❌ barely |
+| Slack video message | −40 to −50 dBFS | ❌ barely |
+| OBS (default settings) | −18 to −23 dBFS | ✅ fine |
+
+videonorma fixes all of them.
 
 ## What it does
 
@@ -32,15 +45,15 @@ videonorma fixes that.
 - **Never modifies the original** — output is `<name>_normalized.<ext>` alongside the source
 - Copies the video stream without re-encoding (fast, no quality loss)
 - Re-encodes audio to AAC 192 kbps with corrected loudness
-- Works as a **CLI tool**, a **file manager right-click script**, and a **background daemon** with system tray
+- Works as a **CLI tool**, a **file manager right-click script**, and a **background daemon** that watches `~/Downloads` and normalizes new videos automatically
 
 ## Before / After
 
-| | Original | Normalized |
+| | Original (macOS screen recording) | Normalized |
 |--|--|--|
-| Mean loudness | −46.1 dB | −18.7 dB |
-| Peak | −21.0 dB | −0.4 dB |
-| Perceived | barely audible | normal |
+| Mean loudness | −46.1 LUFS | −16.0 LUFS |
+| True peak | −21.0 dBTP | −1.5 dBTP |
+| Perceived | barely audible | broadcast-level |
 
 ---
 
@@ -143,10 +156,10 @@ Then run `bash install.sh` as usual.
 ### CLI
 
 ```bash
-# Single file
+# Single file — macOS screen recording, Zoom export, Loom download, etc.
 normalize-audio recording.mov
 
-# Multiple files
+# Multiple files at once
 normalize-audio *.mp4
 
 # Output is created next to the original:
@@ -165,7 +178,7 @@ The script:
 
 ### Daemon (automatic, background)
 
-The daemon watches `~/Downloads` and notifies you when a new video appears:
+The daemon watches `~/Downloads` and notifies you when a new video arrives:
 
 1. A desktop notification pops up: **Normalize / Skip / Dismiss**
 2. Click **Normalize** — it processes in the background and opens the result when done
@@ -215,6 +228,17 @@ LRA:        11 LU
 Video:      stream copy (no re-encode)
 Audio:      AAC 192 kbps
 ```
+
+---
+
+## Keywords
+
+> macOS screen recording too quiet · QuickTime recording low volume · Zoom recording quiet Linux ·
+> Loom video quiet · screencast audio normalization · video loudness fix Linux · EBU R128 normalization ·
+> ffmpeg normalize audio · normalize video loudness · macOS screen capture audio boost ·
+> fix quiet video Linux · audio normalization tool Linux · video audio too low ·
+> normalize mp4 loudness · normalize mov file audio · ffmpeg-normalize GUI · screencast loudness ·
+> macOS recording volume fix · low volume video fix · LUFS normalization Linux
 
 ---
 
