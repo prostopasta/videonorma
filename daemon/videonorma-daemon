@@ -289,6 +289,38 @@ class VideoHandler(FileSystemEventHandler):
             self._dispatch(event.dest_path, already_complete=True)
 
 
+# ── Display detection ────────────────────────────────────────────────────────
+def _find_and_set_display() -> bool:
+    """
+    Find the actual display socket, set DISPLAY/WAYLAND_DISPLAY, return True if found.
+    Checks real socket files — env vars set in the service unit may be wrong
+    (e.g. DISPLAY=:0 when socket is actually X1).
+    """
+    uid = os.getuid()
+    xdg = Path(f"/run/user/{uid}")
+    os.environ.setdefault("XDG_RUNTIME_DIR", str(xdg))
+
+    # Wayland: /run/user/<uid>/wayland-N
+    for name in ("wayland-0", "wayland-1", "wayland-2"):
+        if (xdg / name).exists():
+            os.environ["WAYLAND_DISPLAY"] = name
+            log.debug("Display found: WAYLAND_DISPLAY=%s", name)
+            return True
+
+    # X11: /tmp/.X11-unix/XN
+    x11_dir = Path("/tmp/.X11-unix")
+    if x11_dir.is_dir():
+        for sock in sorted(x11_dir.iterdir()):
+            if sock.name.startswith("X") and sock.name[1:].isdigit():
+                display = f":{sock.name[1:]}"
+                os.environ["DISPLAY"] = display
+                log.debug("Display found: DISPLAY=%s", display)
+                return True
+
+    log.warning("No graphical display socket found — running without tray icon")
+    return False
+
+
 # ── Theme detection ───────────────────────────────────────────────────────────
 def _detect_panel_dark() -> bool:
     """
@@ -519,10 +551,8 @@ class Daemon:
         self._observer.start()
 
         # Decide whether tray is usable: need display + AppIndicator + not disabled
-        has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+        has_display = _find_and_set_display() if not self._no_tray else False
         use_tray = not self._no_tray and INDICATOR_AVAILABLE and has_display
-        if not use_tray and not self._no_tray:
-            log.warning("No graphical display — running without tray icon")
 
         # Tray
         self._stop_event = threading.Event()

@@ -10,13 +10,9 @@ ExecStart=%h/.local/bin/videonorma-daemon
 Restart=on-failure
 RestartSec=10
 
-# Graphical session environment — predictable paths on systemd-based Linux
-# WAYLAND_DISPLAY is almost always wayland-0; DISPLAY is :0 (XWayland)
-# XDG_RUNTIME_DIR and DBUS socket are always /run/user/<UID>
+# Predictable systemd user paths (%U = numeric UID)
 Environment=XDG_RUNTIME_DIR=/run/user/%U
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
-Environment=WAYLAND_DISPLAY=wayland-0
-Environment=DISPLAY=:0
 
 [Install]
 WantedBy=graphical-session.target
