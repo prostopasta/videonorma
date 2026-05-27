@@ -118,8 +118,8 @@ jobs:
           chmod 755 "$PKG/DEBIAN/postinst"
 
           # ── Build ─────────────────────────────────────────────────────────
+          # dpkg-deb names output <PKG_DIR>.deb → already videonorma_${VERSION}_all.deb
           dpkg-deb --build --root-owner-group "$PKG"
-          mv "${PKG}.deb" "videonorma_${VERSION}_all.deb"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
