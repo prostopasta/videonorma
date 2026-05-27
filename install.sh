@@ -3,13 +3,19 @@
 # Tested: Ubuntu 22.04+, Debian 12+, Fedora 38+, Arch Linux, openSUSE Tumbleweed
 # Requires: bash 4+, internet access (to install ffmpeg-normalize via pipx)
 #
-# Usage: bash install.sh [--cli-only]
-#   --cli-only   Install CLI tool only, skip file manager integration
+# Usage: bash install.sh [--cli-only] [--no-daemon]
+#   --cli-only   Install CLI + file manager script only (no daemon)
+#   --no-daemon  Same as --cli-only
 
 set -euo pipefail
 
 CLI_ONLY=false
-[[ "${1:-}" == "--cli-only" ]] && CLI_ONLY=true
+NO_DAEMON=false
+for arg in "$@"; do
+    case "$arg" in
+        --cli-only|--no-daemon) CLI_ONLY=true; NO_DAEMON=true ;;
+    esac
+done
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'
@@ -84,6 +90,7 @@ echo -e "${BOLD}videonorma installer${RESET}"
 echo "─────────────────────────────────────────────"
 info "Package manager : $PM"
 info "CLI-only mode   : $CLI_ONLY"
+info "Install daemon  : $( [[ "$NO_DAEMON" == "true" ]] && echo "no" || echo "yes" )"
 
 section "Checking required dependencies"
 
@@ -240,19 +247,106 @@ FMSCRIPT
     esac
 fi
 
+# ── Phase 2: Daemon ───────────────────────────────────────────────────────────
+if [[ "$NO_DAEMON" != "true" ]]; then
+    section "Phase 2: installing daemon"
+
+    # Python deps for daemon
+    pkg_watchdog()     { case $PM in apt) echo "python3-watchdog";; dnf) echo "python3-watchdog";; pacman) echo "python-watchdog";; zypper) echo "python3-watchdog";; esac; }
+    pkg_appindicator() { case $PM in apt) echo "gir1.2-ayatanaappindicator3-0.1";; dnf) echo "libayatana-appindicator-gtk3";; pacman) echo "libayatana-appindicator";; zypper) echo "typelib-1_0-AyatanaAppIndicator3-0_1";; esac; }
+    pkg_gir_gtk()      { case $PM in apt) echo "python3-gi";; dnf) echo "python3-gobject";; pacman) echo "python-gobject";; zypper) echo "python3-gobject";; esac; }
+
+    # Check Python
+    if ! command -v python3 &>/dev/null; then
+        die "python3 not found. Install it via your package manager."
+    fi
+    ok "python3 found ($(python3 --version))"
+
+    check_or_install python3 "$(pkg_gir_gtk)" required
+    if python3 -c "import gi" 2>/dev/null; then
+        ok "python3-gi (GObject bindings) OK"
+    else
+        install_pkg "$(pkg_gir_gtk)"
+    fi
+
+    info "Installing python3-watchdog..."
+    if python3 -c "import watchdog" 2>/dev/null; then
+        ok "watchdog already installed"
+    else
+        install_pkg "$(pkg_watchdog)"
+    fi
+
+    info "Checking AppIndicator bindings..."
+    if python3 -c "
+import gi
+for ns, ver in [('AyatanaAppIndicator3','0.1'), ('AppIndicator3','0.1')]:
+    try:
+        gi.require_version(ns, ver)
+        exit(0)
+    except Exception:
+        pass
+exit(1)
+" 2>/dev/null; then
+        ok "AppIndicator bindings OK"
+    else
+        warn "AppIndicator not found — trying to install..."
+        if install_pkg "$(pkg_appindicator)"; then
+            ok "AppIndicator installed"
+        else
+            warn "AppIndicator install failed — daemon will run without tray icon"
+        fi
+    fi
+
+    # Install daemon script
+    cp "$SCRIPT_DIR/daemon/videonorma-daemon" "$INSTALL_DIR/videonorma-daemon"
+    chmod +x "$INSTALL_DIR/videonorma-daemon"
+    ok "videonorma-daemon → $INSTALL_DIR/videonorma-daemon"
+
+    # Install tray icon assets
+    ASSETS_DEST="$HOME/.local/share/videonorma"
+    mkdir -p "$ASSETS_DEST"
+    cp "$SCRIPT_DIR/assets/videonorma-dark.svg"  "$ASSETS_DEST/"
+    cp "$SCRIPT_DIR/assets/videonorma-light.svg" "$ASSETS_DEST/"
+    ok "Tray icons → $ASSETS_DEST/"
+
+    # Install systemd user unit
+    SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+    mkdir -p "$SYSTEMD_USER_DIR"
+    cp "$SCRIPT_DIR/daemon/videonorma.service" "$SYSTEMD_USER_DIR/videonorma.service"
+    ok "systemd unit → $SYSTEMD_USER_DIR/videonorma.service"
+
+    systemctl --user daemon-reload
+
+    SVC_STATE=$(systemctl --user is-active videonorma.service 2>/dev/null || true)
+    if [[ "$SVC_STATE" == "active" ]]; then
+        systemctl --user restart videonorma.service
+        ok "videonorma.service restarted (updated in place)"
+    else
+        if systemctl --user enable --now videonorma.service; then
+            ok "videonorma.service enabled and started"
+        else
+            warn "Could not start service — check: journalctl --user -u videonorma"
+        fi
+    fi
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}─────────────────────────────────────────────${RESET}"
 echo -e "${GREEN}${BOLD}videonorma installed successfully!${RESET}"
 echo ""
-echo "  CLI:  normalize-audio <file> [file2 ...]"
+echo "  CLI:    normalize-audio <file> [file2 ...]"
 if [[ "$CLI_ONLY" != "true" ]]; then
     FM=$(detect_file_manager)
     case "$FM" in
-        nautilus|nemo|caja) echo "  GUI:  Right-click any video → Scripts → ▶ Play normalized" ;;
-        dolphin|thunar)     echo "  GUI:  Set up manually (see warnings above)" ;;
+        nautilus|nemo|caja) echo "  GUI:    Right-click any video → Scripts → ▶ Play normalized" ;;
+        dolphin|thunar)     echo "  GUI:    Set up manually (see warnings above)" ;;
     esac
 fi
+if [[ "$NO_DAEMON" != "true" ]]; then
+    echo "  Daemon: systemctl --user status videonorma"
+    echo "  Tray:   look for videonorma icon in your system tray"
+fi
 echo ""
-echo "  Logs: /tmp/videonorma_last.log"
+echo "  Logs:   /tmp/videonorma-daemon.log"
 echo -e "${BOLD}─────────────────────────────────────────────${RESET}"
