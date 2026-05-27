@@ -179,7 +179,15 @@ jobs:
           cat > "$PKG/DEBIAN/postinst" << 'POSTINST'
           #!/bin/sh
           set -e
+
+          # dpkg does not always forward SUDO_USER — use multiple fallbacks
           REAL_USER="${SUDO_USER:-}"
+          if [ -z "$REAL_USER" ] || [ "$REAL_USER" = "root" ]; then
+              REAL_USER=$(logname 2>/dev/null || true)
+          fi
+          if [ -z "$REAL_USER" ] || [ "$REAL_USER" = "root" ]; then
+              REAL_USER=$(who | awk 'NR==1 && $1!="root"{print $1}')
+          fi
 
           # ── ffmpeg-normalize: pipx check runs INSIDE su to use user's pipx ──
           if [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
@@ -190,9 +198,18 @@ jobs:
               ' || true
           fi
 
-          # ── Enable daemon: symlink works without an active user session ──────
+          # ── Enable daemon ─────────────────────────────────────────────────────
           if [ -f /lib/systemd/user/videonorma.service ] && [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
               REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+
+              # Remove old user-installed service file (from install.sh) so systemd
+              # uses the system-wide unit at /lib/systemd/user/ instead
+              OLD_SVC="$REAL_HOME/.config/systemd/user/videonorma.service"
+              if [ -f "$OLD_SVC" ] && [ ! -L "$OLD_SVC" ]; then
+                  rm -f "$OLD_SVC"
+              fi
+
+              # Enable via wants symlink — works without an active user session
               WANTS_DIR="$REAL_HOME/.config/systemd/user/default.target.wants"
               mkdir -p "$WANTS_DIR"
               ln -sf /lib/systemd/user/videonorma.service "$WANTS_DIR/videonorma.service"
