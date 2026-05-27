@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# normalize-audio — normalize video/audio loudness to EBU R128 (-16 LUFS)
+# Part of videonorma: https://github.com/prostopasta/videonorma
+#
+# Usage: normalize-audio <file> [file2 ...]
+# Output: <name>_normalized.<ext> alongside the original
+
+set -euo pipefail
+
+usage() {
+    echo "Usage: normalize-audio <file> [file2 ...]"
+    echo ""
+    echo "  Normalizes loudness to EBU R128 -16 LUFS."
+    echo "  Original file is never modified."
+    echo "  Output: <name>_normalized.<ext>"
+    exit 1
+}
+
+[[ $# -eq 0 ]] && usage
+
+for INPUT in "$@"; do
+    [[ ! -f "$INPUT" ]] && echo "Not found: $INPUT" && continue
+
+    DIR=$(dirname "$INPUT")
+    BASE=$(basename "$INPUT")
+    EXT="${BASE##*.}"
+    NAME="${BASE%.*}"
+    OUTPUT="$DIR/${NAME}_normalized.${EXT}"
+
+    echo ""
+    echo "▶ $BASE"
+    echo "  → $(basename "$OUTPUT")"
+
+    ffmpeg-normalize "$INPUT" \
+        --normalization-type ebu \
+        --target-level -16 \
+        --true-peak -1.5 \
+        --loudness-range-target 11 \
+        --video-codec copy \
+        --audio-codec aac \
+        --audio-bitrate 192k \
+        -o "$OUTPUT"
+
+    echo "  ✓ Done"
+done
+
+echo ""
+echo "All files processed."
