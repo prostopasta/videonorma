@@ -38,12 +38,15 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          tar -czf "videonorma-${VERSION}.tar.gz" \
+          # Build in /tmp to avoid "file changed as we read it" when archiving cwd
+          tar -czf "/tmp/videonorma-${VERSION}.tar.gz" \
             --exclude='.git' \
             --exclude='.github' \
             --transform "s|^\./|videonorma-${VERSION}/|" \
             .
-          zip -r "videonorma-${VERSION}.zip" . -x '.git/*' -x '.github/*'
+          zip -r "/tmp/videonorma-${VERSION}.zip" . -x '.git/*' -x '.github/*'
+          mv "/tmp/videonorma-${VERSION}.tar.gz" .
+          mv "/tmp/videonorma-${VERSION}.zip" .
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
