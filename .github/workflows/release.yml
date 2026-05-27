@@ -204,10 +204,12 @@ jobs:
 
               # Remove old binaries installed by install.sh so /usr/local/bin/ takes effect
               for OLD_BIN in normalize-audio videonorma-daemon; do
-                  OLD_PATH="$REAL_HOME/.local/bin/$OLD_BIN"
-                  if [ -f "$OLD_PATH" ] && [ ! -L "$OLD_PATH" ]; then
-                      rm -f "$OLD_PATH"
-                  fi
+                  for OLD_DIR in "$REAL_HOME/.local/bin" "$REAL_HOME/bin"; do
+                      OLD_PATH="$OLD_DIR/$OLD_BIN"
+                      if [ -f "$OLD_PATH" ] && [ ! -L "$OLD_PATH" ]; then
+                          rm -f "$OLD_PATH"
+                      fi
+                  done
               done
 
               # Remove old user-installed service file (from install.sh) so systemd
