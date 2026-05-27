@@ -492,6 +492,7 @@ class Daemon:
         self._cfg = load_config()
         self._no_tray = no_tray
         self._observer: Observer | None = None
+        self._stop_event = threading.Event()
 
     def _get_cfg(self) -> dict:
         return self._cfg
@@ -517,29 +518,37 @@ class Daemon:
                 log.warning("Watch dir not found, skipping: %s", p)
         self._observer.start()
 
-        # Tray
-        tray = None if self._no_tray else Tray(self._get_cfg, self._save_cfg, self._stop_gtk)
+        # Decide whether tray is usable: need display + AppIndicator + not disabled
+        has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+        use_tray = not self._no_tray and INDICATOR_AVAILABLE and has_display
+        if not use_tray and not self._no_tray:
+            log.warning("No graphical display — running without tray icon")
 
-        # Signal handlers (SIGTERM from systemd, SIGINT from Ctrl-C)
-        signal.signal(signal.SIGTERM, lambda *_: GLib.idle_add(self._stop_gtk))
-        signal.signal(signal.SIGINT,  lambda *_: GLib.idle_add(self._stop_gtk))
+        # Tray
+        self._stop_event = threading.Event()
+        tray = Tray(self._get_cfg, self._save_cfg, self._stop_gtk) if use_tray else None
+
+        # Signal handlers
+        if use_tray:
+            signal.signal(signal.SIGTERM, lambda *_: GLib.idle_add(self._stop_gtk))
+            signal.signal(signal.SIGINT,  lambda *_: GLib.idle_add(self._stop_gtk))
+        else:
+            signal.signal(signal.SIGTERM, lambda *_: self._stop_event.set())
+            signal.signal(signal.SIGINT,  lambda *_: self._stop_event.set())
 
         notify("videonorma", "Running — watching ~/Downloads", 3000)
 
-        if INDICATOR_AVAILABLE and not self._no_tray:
+        if use_tray:
             Gtk.main()
         else:
-            try:
-                while self._observer.is_alive():
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                pass
+            self._stop_event.wait()
 
         self._shutdown()
 
     def _stop_gtk(self) -> bool:
         if INDICATOR_AVAILABLE:
             Gtk.main_quit()
+        self._stop_event.set()
         return False  # remove GLib source
 
     def _shutdown(self) -> None:
