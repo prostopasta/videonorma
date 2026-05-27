@@ -65,16 +65,13 @@ jobs:
           # Phase 2: daemon + tray icons + systemd unit
           if [[ -f daemon/videonorma-daemon ]]; then
             DEPENDS="$DEPENDS, python3-watchdog, gir1.2-ayatanaappindicator3-0.1, python3-gi"
-            mkdir -p "$PKG/usr/share/videonorma" "$PKG/lib/systemd/user"
+            mkdir -p "$PKG/usr/share/icons/hicolor/scalable/apps" "$PKG/lib/systemd/user"
 
             install -m755 daemon/videonorma-daemon "$BIN/videonorma-daemon"
-            # Patch icon path to system-wide location
-            sed -i \
-              's|Path.home() / ".local" / "share" / "videonorma"|Path("/usr/share/videonorma")|' \
-              "$BIN/videonorma-daemon"
 
-            install -m644 assets/videonorma-dark.svg  "$PKG/usr/share/videonorma/"
-            install -m644 assets/videonorma-light.svg "$PKG/usr/share/videonorma/"
+            # Icons go to standard XDG icon theme path so GTK finds them by name
+            install -m644 assets/videonorma-dark.svg  "$PKG/usr/share/icons/hicolor/scalable/apps/"
+            install -m644 assets/videonorma-light.svg "$PKG/usr/share/icons/hicolor/scalable/apps/"
 
             install -m644 daemon/videonorma.service "$PKG/lib/systemd/user/videonorma.service"
             # Patch service ExecStart for system-wide binary path
