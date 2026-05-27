@@ -29,7 +29,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          sed -i "s/^# Version: .*/# Version: $VERSION/" normalize-audio || true
+          sed -i "s/^VERSION=\".*\"/VERSION=\"$VERSION\"/" normalize-audio || true
           if [[ -f daemon/videonorma-daemon ]]; then
             sed -i "s/^VERSION = \".*\"/VERSION = \"$VERSION\"/" daemon/videonorma-daemon
           fi
@@ -103,16 +103,34 @@ jobs:
           cat > "$PKG/DEBIAN/postinst" << 'POSTINST'
           #!/bin/sh
           set -e
-          REAL_USER="${SUDO_USER:-${USER:-}}"
-          if [ -n "$REAL_USER" ] && command -v pipx > /dev/null 2>&1; then
-              su -l "$REAL_USER" -c \
-                "pipx install ffmpeg-normalize 2>/dev/null || pipx upgrade ffmpeg-normalize 2>/dev/null || true" \
-                || true
+          REAL_USER="${SUDO_USER:-}"
+
+          # ── ffmpeg-normalize: pipx check runs INSIDE su to use user's pipx ──
+          if [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
+              su -l "$REAL_USER" -c '
+                  if command -v pipx > /dev/null 2>&1; then
+                      pipx install ffmpeg-normalize 2>/dev/null || pipx upgrade ffmpeg-normalize 2>/dev/null || true
+                  fi
+              ' || true
           fi
-          if [ -f /lib/systemd/user/videonorma.service ] && command -v systemctl > /dev/null 2>&1; then
-              echo ""
-              echo "To start the videonorma background daemon:"
-              echo "  systemctl --user enable --now videonorma"
+
+          # ── Enable daemon: symlink works without an active user session ──────
+          if [ -f /lib/systemd/user/videonorma.service ] && [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
+              REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+              WANTS_DIR="$REAL_HOME/.config/systemd/user/default.target.wants"
+              mkdir -p "$WANTS_DIR"
+              ln -sf /lib/systemd/user/videonorma.service "$WANTS_DIR/videonorma.service"
+
+              # Start immediately if the user session bus is reachable
+              REAL_UID=$(id -u "$REAL_USER" 2>/dev/null || true)
+              if [ -n "$REAL_UID" ] && [ -S "/run/user/$REAL_UID/bus" ]; then
+                  su -l "$REAL_USER" -c "
+                      export XDG_RUNTIME_DIR=/run/user/$REAL_UID
+                      export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$REAL_UID/bus
+                      systemctl --user daemon-reload 2>/dev/null || true
+                      systemctl --user start videonorma.service 2>/dev/null || true
+                  " || true
+              fi
           fi
           POSTINST
           chmod 755 "$PKG/DEBIAN/postinst"
