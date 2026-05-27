@@ -34,7 +34,8 @@ except ImportError:
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import GLib, Gtk  # noqa: E402
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib, Gtk  # noqa: E402
 
 INDICATOR_AVAILABLE = False
 AppIndicator = None
@@ -64,6 +65,7 @@ DEFAULT_CONFIG: dict = {
     "watch_dirs": [str(Path.home() / "Downloads")],
     "auto_normalize": False,
     "open_after": True,
+    "icon_variant": "auto",   # "auto" | "dark-panel" | "light-panel"
 }
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -171,13 +173,43 @@ def normalize_file(path: Path, open_after: bool) -> None:
     threading.Thread(target=_run, daemon=True, name=f"norm-{path.stem}").start()
 
 
+# ── File stability check ──────────────────────────────────────────────────────
+def _wait_until_stable(path: Path, interval: float = 2.0, stable_rounds: int = 2,
+                       timeout: float = 300.0) -> bool:
+    """
+    Poll file size until it stops growing for `stable_rounds` consecutive checks.
+    Returns True when stable, False on timeout or file disappearance.
+    Used for files written directly to their final name (not via .crdownload rename).
+    """
+    deadline = time.monotonic() + timeout
+    prev_size = -1
+    stable = 0
+    while time.monotonic() < deadline:
+        try:
+            size = path.stat().st_size
+        except OSError:
+            return False
+        if size > 0 and size == prev_size:
+            stable += 1
+            if stable >= stable_rounds:
+                log.debug("File stable at %d bytes: %s", size, path.name)
+                return True
+        else:
+            stable = 0
+        prev_size = size
+        time.sleep(interval)
+    log.warning("Stability timeout for %s (still changing after %.0fs)", path.name, timeout)
+    return False
+
+
 # ── File watcher ──────────────────────────────────────────────────────────────
 class VideoHandler(FileSystemEventHandler):
     """Triggers on fully-written video files; skips already-normalized outputs."""
 
     def __init__(self, get_cfg):
         self._get_cfg = get_cfg
-        self._seen: set[str] = set()
+        # path → True means "via on_moved" (already complete, skip stability check)
+        self._seen: dict[str, bool] = {}
         self._lock = threading.Lock()
 
     # ── helpers ────────────────────────────────────────────────────────────
@@ -190,33 +222,44 @@ class VideoHandler(FileSystemEventHandler):
             and not p.name.startswith(".")
         )
 
-    def _dispatch(self, path_str: str) -> None:
+    def _dispatch(self, path_str: str, already_complete: bool = False) -> None:
         with self._lock:
             if path_str in self._seen:
                 return
-            self._seen.add(path_str)
+            self._seen[path_str] = already_complete
 
         cfg = self._get_cfg()
         if not cfg.get("enabled", True):
             log.debug("Watcher disabled — ignoring %s", Path(path_str).name)
             with self._lock:
-                self._seen.discard(path_str)
+                self._seen.pop(path_str, None)
             return
 
         path = Path(path_str)
-        log.info("New video detected: %s", path.name)
+        log.info("New video detected: %s (complete=%s)", path.name, already_complete)
 
         def _ask():
-            # Brief settle: ensure the file is fully flushed
-            time.sleep(0.5)
+            if not already_complete:
+                # on_closed can fire mid-download if the file is opened/closed
+                # multiple times — wait until size is stable.
+                log.debug("Waiting for %s to finish writing…", path.name)
+                if not _wait_until_stable(path):
+                    log.warning("Giving up on %s (never stabilised)", path.name)
+                    with self._lock:
+                        self._seen.pop(path_str, None)
+                    return
+
             with self._lock:
-                self._seen.discard(path_str)
+                self._seen.pop(path_str, None)
+
             if not path.exists():
                 return
+
             cfg = self._get_cfg()
             if cfg.get("auto_normalize"):
                 normalize_file(path, cfg.get("open_after", True))
                 return
+
             action = notify_action("New video in Downloads", path.name)
             if action == "normalize":
                 normalize_file(path, cfg.get("open_after", True))
@@ -227,29 +270,96 @@ class VideoHandler(FileSystemEventHandler):
 
     # ── watchdog events ────────────────────────────────────────────────────
     def on_closed(self, event):
-        """Fires when a file descriptor is closed after writing (Linux inotify)."""
+        """Fires when a file descriptor is closed after writing (Linux inotify).
+        May fire multiple times during an active download — _wait_until_stable handles it."""
         if not event.is_directory and self._is_new_video(event.src_path):
-            self._dispatch(event.src_path)
+            self._dispatch(event.src_path, already_complete=False)
 
     def on_moved(self, event):
-        """Fires when a browser renames foo.crdownload → foo.mp4."""
+        """Fires when a browser renames foo.crdownload → foo.mp4.
+        The file is 100% complete at this point — skip stability check."""
         if not event.is_directory and self._is_new_video(event.dest_path):
-            self._dispatch(event.dest_path)
+            self._dispatch(event.dest_path, already_complete=True)
+
+
+# ── Theme detection ───────────────────────────────────────────────────────────
+def _detect_panel_dark() -> bool:
+    """
+    Return True if the system panel/tray background is dark (→ use light icon).
+
+    Checks in order:
+    1. org.gnome.desktop.interface color-scheme  ('prefer-dark' → dark panel)
+    2. org.gnome.desktop.interface gtk-theme     (name contains 'dark')
+    3. Ubuntu default: Yaru on Ubuntu always has a dark top-bar regardless of
+       color-scheme, so fall back to True (dark panel = light icon needed).
+    """
+    try:
+        result = subprocess.run(
+            ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+            capture_output=True, text=True, check=False,
+        )
+        if "prefer-dark" in result.stdout:
+            return True
+    except FileNotFoundError:
+        pass
+
+    try:
+        result = subprocess.run(
+            ["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
+            capture_output=True, text=True, check=False,
+        )
+        if "dark" in result.stdout.lower():
+            return True
+    except FileNotFoundError:
+        pass
+
+    # Ubuntu's GNOME Shell top bar is dark even in "light" mode (Yaru theme).
+    # Default safe: assume dark panel → use light icon.
+    return True
+
+
+def _icon_for_variant(variant: str) -> str:
+    """
+    Resolve the icon file path for the given variant.
+    variant: 'auto' | 'dark-panel' | 'light-panel'
+    """
+    if variant == "auto":
+        use_dark_panel = _detect_panel_dark()
+    else:
+        use_dark_panel = (variant == "dark-panel")
+
+    name = "icon-on-dark.svg" if use_dark_panel else "icon-on-light.svg"
+    candidate = ASSETS_DIR / name
+    if candidate.exists():
+        return str(candidate)
+    # Fallback to logo or generic
+    fallback = ASSETS_DIR / "logo.svg"
+    return str(fallback) if fallback.exists() else "video-x-generic"
 
 
 # ── Tray icon ─────────────────────────────────────────────────────────────────
 class Tray:
+    _VARIANT_LABELS = {
+        "auto":        "Auto (follow system)",
+        "dark-panel":  "Light icon  (dark panel)",
+        "light-panel": "Dark icon  (light panel)",
+    }
+
     def __init__(self, get_cfg, save_cfg, quit_fn):
         self._get_cfg = get_cfg
         self._save_cfg = save_cfg
         self._quit = quit_fn
         self._indicator = None
+        self._gsettings = None
 
         if not INDICATOR_AVAILABLE:
             log.warning("AppIndicator not available — tray icon disabled")
             return
 
-        icon = str(ASSETS_DIR / "logo.svg") if (ASSETS_DIR / "logo.svg").exists() else "video-x-generic"
+        cfg = get_cfg()
+        icon = _icon_for_variant(cfg.get("icon_variant", "auto"))
+        log.debug("Tray icon: %s", icon)
+
         self._indicator = AppIndicator.Indicator.new(
             APP_NAME,
             icon,
@@ -258,6 +368,32 @@ class Tray:
         self._indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
         self._indicator.set_menu(self._build_menu())
 
+        # Watch GNOME color-scheme changes (auto mode)
+        self._attach_theme_watcher()
+
+    # ── GLib.Settings theme watcher ────────────────────────────────────────
+    def _attach_theme_watcher(self) -> None:
+        try:
+            self._gsettings = Gio.Settings.new("org.gnome.desktop.interface")
+            self._gsettings.connect("changed::color-scheme", self._on_system_theme_changed)
+            self._gsettings.connect("changed::gtk-theme",    self._on_system_theme_changed)
+        except Exception as exc:
+            log.debug("Could not attach theme watcher: %s", exc)
+
+    def _on_system_theme_changed(self, _settings, _key) -> None:
+        cfg = self._get_cfg()
+        if cfg.get("icon_variant", "auto") == "auto":
+            GLib.idle_add(self._refresh_icon)
+
+    def _refresh_icon(self) -> bool:
+        cfg = self._get_cfg()
+        icon = _icon_for_variant(cfg.get("icon_variant", "auto"))
+        log.debug("Refreshing tray icon → %s", icon)
+        if self._indicator:
+            self._indicator.set_icon_full(icon, "videonorma")
+        return False  # one-shot GLib source
+
+    # ── Menu ───────────────────────────────────────────────────────────────
     def _build_menu(self) -> Gtk.Menu:
         cfg = self._get_cfg()
         menu = Gtk.Menu()
@@ -279,9 +415,33 @@ class Tray:
 
         menu.append(Gtk.SeparatorMenuItem())
 
+        # Icon theme submenu
+        icon_menu_item = Gtk.MenuItem(label="Icon theme")
+        icon_submenu = Gtk.Menu()
+        current_variant = cfg.get("icon_variant", "auto")
+        self._icon_radio_group: list[Gtk.RadioMenuItem] = []
+
+        prev = None
+        for variant, label in self._VARIANT_LABELS.items():
+            item = Gtk.RadioMenuItem.new_with_label(
+                [prev] if prev else [], label
+            )
+            if variant == current_variant:
+                item.set_active(True)
+            item.connect("toggled", self._on_icon_variant_toggled, variant)
+            icon_submenu.append(item)
+            self._icon_radio_group.append(item)
+            prev = item
+
+        icon_menu_item.set_submenu(icon_submenu)
+        menu.append(icon_menu_item)
+
+        menu.append(Gtk.SeparatorMenuItem())
+
         log_item = Gtk.MenuItem(label="Open log…")
         log_item.connect("activate", lambda _: subprocess.Popen(
-            ["xdg-open", str(LOG_FILE)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ["xdg-open", str(LOG_FILE)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         ))
         menu.append(log_item)
 
@@ -294,6 +454,7 @@ class Tray:
         menu.show_all()
         return menu
 
+    # ── Handlers ───────────────────────────────────────────────────────────
     def _on_watch_toggle(self, item: Gtk.CheckMenuItem) -> None:
         cfg = self._get_cfg()
         cfg["enabled"] = item.get_active()
@@ -307,6 +468,15 @@ class Tray:
         cfg["auto_normalize"] = item.get_active()
         self._save_cfg(cfg)
         log.info("Auto-normalize: %s", cfg["auto_normalize"])
+
+    def _on_icon_variant_toggled(self, item: Gtk.RadioMenuItem, variant: str) -> None:
+        if not item.get_active():
+            return
+        cfg = self._get_cfg()
+        cfg["icon_variant"] = variant
+        self._save_cfg(cfg)
+        log.info("Icon variant: %s", variant)
+        GLib.idle_add(self._refresh_icon)
 
 
 # ── Daemon ────────────────────────────────────────────────────────────────────
