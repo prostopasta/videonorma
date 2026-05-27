@@ -1,7 +1,12 @@
 name: Release
 
+# Triggers:
+#   1. Push to main — auto-detects bump from conventional commits, creates tag + release
+#   2. Tag push (v*.*.*) — manual release from a pushed tag (e.g. hotfix)
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v[0-9]*.[0-9]*.[0-9]*'
 
@@ -19,15 +24,89 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract version from tag
+      # ── Step 1: Determine version ───────────────────────────────────────────
+      # On tag push → use the tag directly.
+      # On branch push → read conventional commits since last tag, bump semver.
+      - name: Determine version
         id: version
         env:
           REF_NAME: ${{ github.ref_name }}
-        run: echo "VERSION=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if [[ "$REF_TYPE" == "tag" ]]; then
+            VERSION="${REF_NAME#v}"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "new_tag=$REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Source: manual tag $REF_NAME"
+            exit 0
+          fi
+
+          # Branch push — determine bump from commits
+          LATEST=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          [[ -z "$LATEST" ]] && LATEST="v0.0.0"
+          echo "Latest tag: $LATEST"
+
+          COMMITS=$(git log "${LATEST}..HEAD" --format="%s%n%b" 2>/dev/null || true)
+          if [[ -z "$COMMITS" ]]; then
+            echo "No new commits — skipping release."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BUMP="none"
+          if echo "$COMMITS" | grep -qiE "^BREAKING CHANGE"; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -qE "^feat(\(.+\))?!?:"; then
+            BUMP="minor"
+          elif echo "$COMMITS" | grep -qE "^fix(\(.+\))?!?:"; then
+            BUMP="patch"
+          fi
+
+          echo "Bump type: $BUMP"
+          if [[ "$BUMP" == "none" ]]; then
+            echo "No releasable commits (no fix/feat) — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          VER="${LATEST#v}"
+          MAJOR=$(echo "$VER" | cut -d. -f1)
+          MINOR=$(echo "$VER" | cut -d. -f2)
+          PATCH=$(echo "$VER" | cut -d. -f3)
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR+1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH+1)) ;;
+          esac
+
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: $NEW_TAG"
+          echo "version=$VERSION"   >> "$GITHUB_OUTPUT"
+          echo "new_tag=$NEW_TAG"   >> "$GITHUB_OUTPUT"
+          echo "skip=false"         >> "$GITHUB_OUTPUT"
+
+      # ── Step 2: Tag commit (branch push only) ──────────────────────────────
+      - name: Create and push tag
+        if: steps.version.outputs.skip == 'false' && github.ref_type == 'branch'
+        env:
+          NEW_TAG: ${{ steps.version.outputs.new_tag }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$NEW_TAG"
+          git push origin "$NEW_TAG"
+
+      # ── Step 3: Build artifacts ─────────────────────────────────────────────
+      - name: Skip check
+        if: steps.version.outputs.skip == 'true'
+        run: echo "Nothing to release." && exit 0
 
       - name: Update version in scripts
+        if: steps.version.outputs.skip == 'false'
         env:
-          VERSION: ${{ steps.version.outputs.VERSION }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           sed -i "s/^VERSION=\".*\"/VERSION=\"$VERSION\"/" normalize-audio || true
           if [[ -f daemon/videonorma-daemon ]]; then
@@ -35,10 +114,10 @@ jobs:
           fi
 
       - name: Create source archive
+        if: steps.version.outputs.skip == 'false'
         env:
-          VERSION: ${{ steps.version.outputs.VERSION }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # Build in /tmp to avoid archiving the output file itself
           tar -czf "/tmp/videonorma-${VERSION}.tar.gz" \
             --exclude='.git' \
             --exclude='.github' \
@@ -47,8 +126,9 @@ jobs:
           mv "/tmp/videonorma-${VERSION}.tar.gz" .
 
       - name: Build .deb package (Ubuntu / Debian)
+        if: steps.version.outputs.skip == 'false'
         env:
-          VERSION: ${{ steps.version.outputs.VERSION }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           PKG="videonorma_${VERSION}_all"
           BIN="$PKG/usr/local/bin"
@@ -91,12 +171,11 @@ jobs:
           Homepage: https://github.com/prostopasta/videonorma
           Description: Video loudness normalization for Linux
            Normalizes video/audio loudness to EBU R128 (-16 LUFS, broadcast standard).
-           Includes CLI tool, file manager right-click script, and (v1.2.0+) background
+           Includes CLI tool, file manager right-click script, and background
            daemon with system tray icon for automatic Downloads monitoring.
           EOF
 
           # ── DEBIAN/postinst ───────────────────────────────────────────────
-          # Install ffmpeg-normalize (not available as a .deb; distributed via PyPI)
           cat > "$PKG/DEBIAN/postinst" << 'POSTINST'
           #!/bin/sh
           set -e
@@ -133,14 +212,15 @@ jobs:
           chmod 755 "$PKG/DEBIAN/postinst"
 
           # ── Build ─────────────────────────────────────────────────────────
-          # dpkg-deb names output <PKG_DIR>.deb → already videonorma_${VERSION}_all.deb
           dpkg-deb --build --root-owner-group "$PKG"
 
       - name: Publish release
+        if: steps.version.outputs.skip == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          name: "videonorma ${{ github.ref_name }}"
+          tag_name: ${{ steps.version.outputs.new_tag }}
+          name: "videonorma ${{ steps.version.outputs.new_tag }}"
           generate_release_notes: true
           files: |
-            videonorma_${{ steps.version.outputs.VERSION }}_all.deb
-            videonorma-${{ steps.version.outputs.VERSION }}.tar.gz
+            videonorma_${{ steps.version.outputs.version }}_all.deb
+            videonorma-${{ steps.version.outputs.version }}.tar.gz
