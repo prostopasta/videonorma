@@ -9,10 +9,13 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-Linux-blue?logo=linux&logoColor=white"/>
-  <img src="https://img.shields.io/badge/tested-Ubuntu%20%7C%20Fedora%20%7C%20Arch%20%7C%20openSUSE-informational"/>
-  <img src="https://img.shields.io/badge/powered%20by-ffmpeg--normalize-green"/>
-  <img src="https://img.shields.io/badge/license-MIT-lightgrey"/>
+  <a href="https://github.com/prostopasta/videonorma/releases/latest">
+    <img src="https://img.shields.io/github/v/release/prostopasta/videonorma?style=flat-square&label=latest&color=brightgreen"/>
+  </a>
+  <img src="https://img.shields.io/badge/platform-Linux-blue?logo=linux&logoColor=white&style=flat-square"/>
+  <img src="https://img.shields.io/badge/tested-Ubuntu%20%7C%20Fedora%20%7C%20Arch%20%7C%20openSUSE-informational&style=flat-square"/>
+  <img src="https://img.shields.io/badge/powered%20by-ffmpeg--normalize-green&style=flat-square"/>
+  <img src="https://img.shields.io/github/license/prostopasta/videonorma?style=flat-square&color=lightgrey"/>
 </p>
 
 ---
@@ -147,8 +150,9 @@ Any container supported by ffmpeg: `.mov`, `.mp4`, `.mkv`, `.webm`, `.avi`, `.m4
 
 ## Roadmap
 
-- [x] Phase 1 — CLI tool + file manager script
-- [ ] Phase 2 — **videonorma daemon**: watches `~/Downloads`, shows a desktop notification with a one-click "Normalize" action, system tray icon to enable/disable
+- [x] Phase 1 — CLI tool + file manager right-click script
+- [x] Phase 2 — **videonorma daemon**: watches `~/Downloads`, desktop notification with one-click "Normalize", system tray icon with dark/light theme support
+- [ ] Phase 3 — multi-directory watch, per-directory rules, GUI settings window
 
 ---
 
