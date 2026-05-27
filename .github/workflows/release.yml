@@ -34,19 +34,92 @@ jobs:
             sed -i "s/^VERSION = \".*\"/VERSION = \"$VERSION\"/" daemon/videonorma-daemon
           fi
 
-      - name: Create release archives
+      - name: Create source archive
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          # Build in /tmp to avoid "file changed as we read it" when archiving cwd
+          # Build in /tmp to avoid archiving the output file itself
           tar -czf "/tmp/videonorma-${VERSION}.tar.gz" \
             --exclude='.git' \
             --exclude='.github' \
             --transform "s|^\./|videonorma-${VERSION}/|" \
             .
-          zip -r "/tmp/videonorma-${VERSION}.zip" . -x '.git/*' -x '.github/*'
           mv "/tmp/videonorma-${VERSION}.tar.gz" .
-          mv "/tmp/videonorma-${VERSION}.zip" .
+
+      - name: Build .deb package (Ubuntu / Debian)
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          PKG="videonorma_${VERSION}_all"
+          BIN="$PKG/usr/local/bin"
+          DOC="$PKG/usr/share/doc/videonorma"
+          mkdir -p "$BIN" "$DOC" "$PKG/DEBIAN"
+
+          # ── Install files ──────────────────────────────────────────────────
+          install -m755 normalize-audio "$BIN/normalize-audio"
+          install -m644 README.md       "$DOC/README.md"
+          install -m644 LICENSE         "$DOC/copyright"
+
+          DEPENDS="ffmpeg, libnotify-bin | libnotify4, xdg-utils"
+
+          # Phase 2: daemon + tray icons + systemd unit
+          if [[ -f daemon/videonorma-daemon ]]; then
+            DEPENDS="$DEPENDS, python3-watchdog, gir1.2-ayatanaappindicator3-0.1, python3-gi"
+            mkdir -p "$PKG/usr/share/videonorma" "$PKG/lib/systemd/user"
+
+            install -m755 daemon/videonorma-daemon "$BIN/videonorma-daemon"
+            # Patch icon path to system-wide location
+            sed -i \
+              's|Path.home() / ".local" / "share" / "videonorma"|Path("/usr/share/videonorma")|' \
+              "$BIN/videonorma-daemon"
+
+            install -m644 assets/videonorma-dark.svg  "$PKG/usr/share/videonorma/"
+            install -m644 assets/videonorma-light.svg "$PKG/usr/share/videonorma/"
+
+            install -m644 daemon/videonorma.service "$PKG/lib/systemd/user/videonorma.service"
+            # Patch service ExecStart for system-wide binary path
+            sed -i \
+              's|%h/.local/bin/videonorma-daemon|/usr/local/bin/videonorma-daemon|' \
+              "$PKG/lib/systemd/user/videonorma.service"
+          fi
+
+          # ── DEBIAN/control ────────────────────────────────────────────────
+          cat > "$PKG/DEBIAN/control" << EOF
+          Package: videonorma
+          Version: $VERSION
+          Architecture: all
+          Maintainer: prostopasta <https://github.com/prostopasta/videonorma>
+          Depends: $DEPENDS
+          Recommends: pipx
+          Homepage: https://github.com/prostopasta/videonorma
+          Description: Video loudness normalization for Linux
+           Normalizes video/audio loudness to EBU R128 (-16 LUFS, broadcast standard).
+           Includes CLI tool, file manager right-click script, and (v1.2.0+) background
+           daemon with system tray icon for automatic Downloads monitoring.
+          EOF
+
+          # ── DEBIAN/postinst ───────────────────────────────────────────────
+          # Install ffmpeg-normalize (not available as a .deb; distributed via PyPI)
+          cat > "$PKG/DEBIAN/postinst" << 'POSTINST'
+          #!/bin/sh
+          set -e
+          REAL_USER="${SUDO_USER:-${USER:-}}"
+          if [ -n "$REAL_USER" ] && command -v pipx > /dev/null 2>&1; then
+              su -l "$REAL_USER" -c \
+                "pipx install ffmpeg-normalize 2>/dev/null || pipx upgrade ffmpeg-normalize 2>/dev/null || true" \
+                || true
+          fi
+          if [ -f /lib/systemd/user/videonorma.service ] && command -v systemctl > /dev/null 2>&1; then
+              echo ""
+              echo "To start the videonorma background daemon:"
+              echo "  systemctl --user enable --now videonorma"
+          fi
+          POSTINST
+          chmod 755 "$PKG/DEBIAN/postinst"
+
+          # ── Build ─────────────────────────────────────────────────────────
+          dpkg-deb --build --root-owner-group "$PKG"
+          mv "${PKG}.deb" "videonorma_${VERSION}_all.deb"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -54,7 +127,5 @@ jobs:
           name: "videonorma ${{ github.ref_name }}"
           generate_release_notes: true
           files: |
-            install.sh
-            normalize-audio
+            videonorma_${{ steps.version.outputs.VERSION }}_all.deb
             videonorma-${{ steps.version.outputs.VERSION }}.tar.gz
-            videonorma-${{ steps.version.outputs.VERSION }}.zip
