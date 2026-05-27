@@ -58,7 +58,7 @@ IGNORE_SUFFIXES = frozenset({".crdownload", ".part", ".tmp", ".download"})
 CONFIG_DIR = Path.home() / ".config" / APP_NAME
 CONFIG_FILE = CONFIG_DIR / "config.json"
 LOG_FILE = Path("/tmp/videonorma-daemon.log")
-ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
+ASSETS_DIR = Path.home() / ".local" / "share" / "videonorma"
 
 DEFAULT_CONFIG: dict = {
     "enabled": True,
@@ -359,7 +359,8 @@ def _detect_panel_dark() -> bool:
 
 def _icon_for_variant(variant: str) -> str:
     """
-    Resolve the icon file path for the given variant.
+    Return icon NAME (without extension) for the given variant.
+    AppIndicator will look it up via icon_theme_path.
     variant: 'auto' | 'dark-panel' | 'light-panel'
     """
     if variant == "auto":
@@ -367,13 +368,12 @@ def _icon_for_variant(variant: str) -> str:
     else:
         use_dark_panel = (variant == "dark-panel")
 
-    name = "icon-on-dark.svg" if use_dark_panel else "icon-on-light.svg"
-    candidate = ASSETS_DIR / name
-    if candidate.exists():
-        return str(candidate)
-    # Fallback to logo or generic
-    fallback = ASSETS_DIR / "logo.svg"
-    return str(fallback) if fallback.exists() else "video-x-generic"
+    name = "videonorma-dark" if use_dark_panel else "videonorma-light"
+    # Verify the file exists; if not, fall back to a generic system icon
+    for ext in (".png", ".svg"):
+        if (ASSETS_DIR / f"{name}{ext}").exists():
+            return name
+    return "audio-volume-high"  # generic fallback from system theme
 
 
 # ── Tray icon ─────────────────────────────────────────────────────────────────
@@ -404,6 +404,7 @@ class Tray:
             icon,
             AppIndicator.IndicatorCategory.APPLICATION_STATUS,
         )
+        self._indicator.set_icon_theme_path(str(ASSETS_DIR))
         self._indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
         self._indicator.set_menu(self._build_menu())
 

@@ -302,6 +302,13 @@ exit(1)
     chmod +x "$INSTALL_DIR/videonorma-daemon"
     ok "videonorma-daemon → $INSTALL_DIR/videonorma-daemon"
 
+    # Install tray icon assets
+    ASSETS_DEST="$HOME/.local/share/videonorma"
+    mkdir -p "$ASSETS_DEST"
+    cp "$SCRIPT_DIR/assets/videonorma-dark.svg"  "$ASSETS_DEST/"
+    cp "$SCRIPT_DIR/assets/videonorma-light.svg" "$ASSETS_DEST/"
+    ok "Tray icons → $ASSETS_DEST/"
+
     # Install systemd user unit
     SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
     mkdir -p "$SYSTEMD_USER_DIR"
