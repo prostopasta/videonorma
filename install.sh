@@ -302,12 +302,13 @@ exit(1)
     chmod +x "$INSTALL_DIR/videonorma-daemon"
     ok "videonorma-daemon → $INSTALL_DIR/videonorma-daemon"
 
-    # Install tray icon assets
-    ASSETS_DEST="$HOME/.local/share/videonorma"
-    mkdir -p "$ASSETS_DEST"
-    cp "$SCRIPT_DIR/assets/videonorma-dark.svg"  "$ASSETS_DEST/"
-    cp "$SCRIPT_DIR/assets/videonorma-light.svg" "$ASSETS_DEST/"
-    ok "Tray icons → $ASSETS_DEST/"
+    # Install tray icon assets to standard XDG icon theme path
+    ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
+    mkdir -p "$ICON_DIR"
+    cp "$SCRIPT_DIR/assets/videonorma-dark.svg"  "$ICON_DIR/"
+    cp "$SCRIPT_DIR/assets/videonorma-light.svg" "$ICON_DIR/"
+    gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+    ok "Tray icons → $ICON_DIR/"
 
     # Install systemd user unit
     SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
