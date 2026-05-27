@@ -231,7 +231,7 @@ jobs:
                       export XDG_RUNTIME_DIR=/run/user/$REAL_UID
                       export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$REAL_UID/bus
                       systemctl --user daemon-reload 2>/dev/null || true
-                      systemctl --user start videonorma.service 2>/dev/null || true
+                      systemctl --user restart videonorma.service 2>/dev/null || true
                   " || true
               fi
           fi
