@@ -309,10 +309,17 @@ exit(1)
     ok "systemd unit → $SYSTEMD_USER_DIR/videonorma.service"
 
     systemctl --user daemon-reload
-    if systemctl --user enable --now videonorma.service; then
-        ok "videonorma.service enabled and started"
+
+    SVC_STATE=$(systemctl --user is-active videonorma.service 2>/dev/null || true)
+    if [[ "$SVC_STATE" == "active" ]]; then
+        systemctl --user restart videonorma.service
+        ok "videonorma.service restarted (updated in place)"
     else
-        warn "Could not start service — check: journalctl --user -u videonorma"
+        if systemctl --user enable --now videonorma.service; then
+            ok "videonorma.service enabled and started"
+        else
+            warn "Could not start service — check: journalctl --user -u videonorma"
+        fi
     fi
 fi
 
