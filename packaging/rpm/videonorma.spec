@@ -8,7 +8,6 @@ URL:            https://github.com/prostopasta/videonorma
 Source0:        https://github.com/prostopasta/videonorma/releases/download/v%{version}/videonorma-%{version}.tar.gz
 
 BuildArch:      noarch
-BuildRequires:  sed
 
 Requires:       ffmpeg
 Requires:       python3-watchdog
@@ -119,5 +118,5 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
-* Wed May 28 2026 prostopasta <https://github.com/prostopasta/videonorma> - __VERSION__-1
+* Thu May 28 2026 prostopasta <https://github.com/prostopasta/videonorma> - __VERSION__-1
 - Initial RPM package
