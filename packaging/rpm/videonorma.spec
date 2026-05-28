@@ -52,9 +52,6 @@ sed -i \
     's|%%h/.local/bin/videonorma-daemon|%{_prefix}/local/bin/videonorma-daemon|' \
     %{buildroot}%{_userunitdir}/videonorma.service
 
-# Docs
-install -Dm644 README.md %{buildroot}%{_docdir}/%{name}/README.md
-
 %files
 %license LICENSE
 %doc README.md
