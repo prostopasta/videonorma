@@ -59,14 +59,14 @@ videonorma fixes all of them.
 
 ### Distributions
 
-| Distro | CLI | File manager script | Notes |
-|--------|:---:|:-------------------:|-------|
-| Ubuntu 22.04+ | ✅ | ✅ | Fully tested |
-| Debian 12+ | ✅ | ✅ | |
-| Fedora 38+ | ✅ | ✅ | ffmpeg needs [RPM Fusion](#fedora--rhel) |
-| Arch / Manjaro | ✅ | ✅ | |
-| openSUSE Tumbleweed | ✅ | ✅ | |
-| Other systemd distros | ✅ | ⚠️ | Manual file manager setup |
+| Distro | CLI | File manager script | Package | Notes |
+|--------|:---:|:-------------------:|:-------:|-------|
+| Ubuntu 22.04+ | ✅ | ✅ | `.deb` | Fully tested |
+| Debian 12+ | ✅ | ✅ | `.deb` | |
+| Fedora 38+ | ✅ | ✅ | `.rpm` | ffmpeg needs [RPM Fusion](#fedora--rhel--rpm-package) |
+| Arch / Manjaro | ✅ | ✅ | AUR | |
+| openSUSE Tumbleweed | ✅ | ✅ | tarball | |
+| Other systemd distros | ✅ | ⚠️ | tarball | Manual file manager setup |
 
 ### File managers
 
@@ -108,6 +108,50 @@ sudo apt-get install -f   # install any missing system dependencies
 ```
 
 The package installs `normalize-audio` to `/usr/local/bin/` and runs `pipx install ffmpeg-normalize` automatically.
+
+### Arch Linux — AUR
+
+Install via your AUR helper:
+
+```bash
+yay -S videonorma
+# or
+paru -S videonorma
+```
+
+**Manual install from PKGBUILD** (download the `PKGBUILD` from the [releases page](https://github.com/prostopasta/videonorma/releases/latest)):
+
+```bash
+mkdir videonorma && cd videonorma
+curl -LO https://github.com/prostopasta/videonorma/releases/latest/download/PKGBUILD
+makepkg -si
+```
+
+After install, enable `pipx` and install `ffmpeg-normalize`:
+
+```bash
+pipx install ffmpeg-normalize
+```
+
+### Fedora / RHEL — .rpm package
+
+Enable [RPM Fusion](https://rpmfusion.org/) (required for `ffmpeg`), then install the `.rpm`:
+
+```bash
+sudo dnf install -y \
+  https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+
+VER=$(curl -s https://api.github.com/repos/prostopasta/videonorma/releases/latest \
+  | grep tag_name | cut -d'"' -f4 | tr -d v)
+sudo dnf install -y \
+  "https://github.com/prostopasta/videonorma/releases/latest/download/videonorma-${VER}-1.noarch.rpm"
+```
+
+After install, enable `pipx` and install `ffmpeg-normalize`:
+
+```bash
+pipx install ffmpeg-normalize
+```
 
 ### Any distro — from source archive
 
@@ -211,7 +255,7 @@ Any container supported by ffmpeg: `.mov`, `.mp4`, `.mkv`, `.webm`, `.avi`, `.m4
 
 - [x] Phase 1 — CLI tool + file manager right-click script
 - [x] Phase 2 — **videonorma daemon**: watches `~/Downloads`, desktop notification with one-click "Normalize", system tray icon with dark/light theme support
-- [ ] Phase 3 — native **Arch Linux** package (PKGBUILD + AUR submission) and native **Fedora / RPM** package (`.rpm` via `rpmbuild`)
+- [x] Phase 3 — native **Arch Linux** package (PKGBUILD + AUR) and native **Fedora / RPM** package (`.rpm` via `rpmbuild`)
 - [ ] Phase 4 — multi-directory watch, per-directory rules, GUI settings window
 
 ---

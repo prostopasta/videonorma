@@ -1,0 +1,51 @@
+# Maintainer: prostopasta <https://github.com/prostopasta/videonorma>
+pkgname=videonorma
+pkgver=__VERSION__
+pkgrel=1
+pkgdesc="Fix quiet macOS screen recordings on Linux — normalize video loudness to EBU R128 (-16 LUFS)"
+arch=('any')
+url="https://github.com/prostopasta/videonorma"
+license=('MIT')
+depends=(
+    'ffmpeg'
+    'python-watchdog'
+    'python-gobject'
+    'libnotify'
+    'xdg-utils'
+)
+optdepends=(
+    'libayatana-appindicator: system tray icon for the background daemon'
+    'pipx: required to install ffmpeg-normalize (the normalization engine)'
+    'zenity: error dialogs in the file manager script'
+)
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/prostopasta/videonorma/releases/download/v${pkgver}/videonorma-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+    cd "${srcdir}/videonorma-${pkgver}"
+
+    # CLI tool
+    install -Dm755 normalize-audio        "${pkgdir}/usr/local/bin/normalize-audio"
+
+    # Daemon
+    install -Dm755 daemon/videonorma-daemon "${pkgdir}/usr/local/bin/videonorma-daemon"
+
+    # Tray icons (XDG hicolor standard path)
+    install -Dm644 assets/videonorma-dark.svg \
+        "${pkgdir}/usr/share/icons/hicolor/scalable/apps/videonorma-dark.svg"
+    install -Dm644 assets/videonorma-light.svg \
+        "${pkgdir}/usr/share/icons/hicolor/scalable/apps/videonorma-light.svg"
+
+    # systemd user unit
+    install -Dm644 daemon/videonorma.service \
+        "${pkgdir}/usr/lib/systemd/user/videonorma.service"
+
+    # Patch service ExecStart for system-wide binary path
+    sed -i \
+        's|%h/.local/bin/videonorma-daemon|/usr/local/bin/videonorma-daemon|' \
+        "${pkgdir}/usr/lib/systemd/user/videonorma.service"
+
+    # Docs
+    install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+    install -Dm644 LICENSE   "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

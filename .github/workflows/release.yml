@@ -112,6 +112,8 @@ jobs:
           if [[ -f daemon/videonorma-daemon ]]; then
             sed -i "s/^VERSION = \".*\"/VERSION = \"$VERSION\"/" daemon/videonorma-daemon
           fi
+          sed -i "s/__VERSION__/$VERSION/g" packaging/arch/PKGBUILD
+          sed -i "s/__VERSION__/$VERSION/g" packaging/rpm/videonorma.spec
 
       - name: Create source archive
         if: steps.version.outputs.skip == 'false'
@@ -124,6 +126,20 @@ jobs:
             --transform "s|^\./|videonorma-${VERSION}/|" \
             .
           mv "/tmp/videonorma-${VERSION}.tar.gz" .
+
+      - name: Build RPM package (Fedora / RHEL)
+        if: steps.version.outputs.skip == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          sudo apt-get install -y rpm >/dev/null 2>&1
+          mkdir -p ~/rpmbuild/{SPECS,SOURCES}
+          cp "packaging/rpm/videonorma.spec" ~/rpmbuild/SPECS/
+          cp "videonorma-${VERSION}.tar.gz" ~/rpmbuild/SOURCES/
+          rpmbuild -bb ~/rpmbuild/SPECS/videonorma.spec \
+            --define "_userunitdir /usr/lib/systemd/user" \
+            --define "_docdir /usr/share/doc"
+          find ~/rpmbuild/RPMS -name "*.rpm" -exec cp {} . \;
 
       - name: Build .deb package (Ubuntu / Debian)
         if: steps.version.outputs.skip == 'false'
@@ -251,3 +267,5 @@ jobs:
           files: |
             videonorma_${{ steps.version.outputs.version }}_all.deb
             videonorma-${{ steps.version.outputs.version }}.tar.gz
+            videonorma-${{ steps.version.outputs.version }}-1.noarch.rpm
+            packaging/arch/PKGBUILD
