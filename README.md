@@ -211,7 +211,8 @@ Any container supported by ffmpeg: `.mov`, `.mp4`, `.mkv`, `.webm`, `.avi`, `.m4
 
 - [x] Phase 1 — CLI tool + file manager right-click script
 - [x] Phase 2 — **videonorma daemon**: watches `~/Downloads`, desktop notification with one-click "Normalize", system tray icon with dark/light theme support
-- [ ] Phase 3 — multi-directory watch, per-directory rules, GUI settings window
+- [ ] Phase 3 — native **Arch Linux** package (PKGBUILD + AUR submission) and native **Fedora / RPM** package (`.rpm` via `rpmbuild`)
+- [ ] Phase 4 — multi-directory watch, per-directory rules, GUI settings window
 
 ---
 
