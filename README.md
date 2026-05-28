@@ -18,6 +18,31 @@
 
 ---
 
+## Table of Contents
+
+- [The problem](#the-problem)
+- [What it does](#what-it-does)
+- [Before / After](#before--after)
+- [Compatibility](#compatibility)
+- [Requirements](#requirements)
+- [Installation](#installation)
+  - [Ubuntu / Debian — .deb](#ubuntu--debian--deb-package-recommended)
+  - [Arch Linux — AUR](#arch-linux--aur)
+  - [Fedora / RHEL — .rpm](#fedora--rhel--rpm-package)
+  - [Any distro — from source](#any-distro--from-source-archive)
+  - [From git (development)](#from-git-development)
+- [Usage](#usage)
+  - [CLI](#cli)
+  - [File manager](#file-manager-gnome-cinnamon-mate)
+  - [Daemon](#daemon-automatic-background)
+- [Supported formats](#supported-formats)
+- [Roadmap](#roadmap)
+- [How it works](#how-it-works)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
 ## The problem
 
 **macOS screen recordings arrive whisper-quiet on Linux.**
@@ -179,18 +204,6 @@ cd videonorma
 bash install.sh
 ```
 
-### Fedora / RHEL
-
-`ffmpeg` is not in the default Fedora repositories. Enable RPM Fusion first:
-
-```bash
-sudo dnf install -y \
-  https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
-sudo dnf install -y ffmpeg
-```
-
-Then run `bash install.sh` as usual.
-
 ---
 
 ## Usage
@@ -255,8 +268,12 @@ Any container supported by ffmpeg: `.mov`, `.mp4`, `.mkv`, `.webm`, `.avi`, `.m4
 
 - [x] Phase 1 — CLI tool + file manager right-click script
 - [x] Phase 2 — **videonorma daemon**: watches `~/Downloads`, desktop notification with one-click "Normalize", system tray icon with dark/light theme support
-- [x] Phase 3 — native **Arch Linux** package (PKGBUILD + AUR) and native **Fedora / RPM** package (`.rpm` via `rpmbuild`)
-- [ ] Phase 4 — multi-directory watch, per-directory rules, GUI settings window
+- [x] Phase 3.1 — PKGBUILD for **Arch Linux / AUR** and `.rpm` for **Fedora / RHEL** — both published as GitHub Release assets
+- [ ] Phase 3.2 — **AUR submission**: real checksums in PKGBUILD, `.SRCINFO`, auto-push to `aur.archlinux.org` on every release
+- [ ] Phase 3.3 — **Fedora COPR**: auto-publish `.rpm` to a COPR repository so users can `dnf install` with a one-time `dnf copr enable`
+- [ ] Phase 4 — **Flatpak / Flathub** (cross-distro, works on Ubuntu / Fedora / Arch / openSUSE); multi-directory watch; per-directory rules; GUI settings window
+
+> Want to help? See [CONTRIBUTING.md](CONTRIBUTING.md) for guides on AUR submission, COPR setup, Flatpak packaging, and package testing.
 
 ---
 
@@ -282,6 +299,19 @@ Audio:      AAC 192 kbps
 > fix quiet video Linux · audio normalization tool Linux · video audio too low ·
 > normalize mp4 loudness · normalize mov file audio · ffmpeg-normalize GUI · screencast loudness ·
 > macOS recording volume fix · low volume video fix · LUFS normalization Linux
+
+---
+
+## Contributing
+
+Contributions are welcome! See **[CONTRIBUTING.md](CONTRIBUTING.md)** for:
+
+- How to submit videonorma to **AUR** (Arch User Repository)
+- How to publish to **Fedora COPR** so Fedora/RHEL users can `dnf install`
+- How to package for **Flatpak / Flathub**
+- How to **test packages** on each distro (Ubuntu, Fedora, Arch)
+
+If you want to take ownership of the AUR or COPR package — open an issue or start a discussion, it's very welcome.
 
 ---
 
